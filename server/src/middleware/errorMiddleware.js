@@ -1,16 +1,24 @@
+import { logger } from '../config/logger.js';
 import { AppError } from '../utils/errors.js';
 
 export const errorHandler = (err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   let message = err.isOperational ? err.message : 'Internal server error';
   
-  if (process.env.NODE_ENV !== 'production') {
-    console.error(err);
-  } else {
-    message = 'An error occurred';
-  }
+  // Always log errors with structured format
+  logger.error(err.message || 'Unhandled error', {
+    statusCode,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    isOperational: err.isOperational
+  });
   
-  res.status(statusCode).json({ success: false, message });
+  res.status(statusCode).json({ 
+    success: false, 
+    message,
+    ...(process.env.NODE_ENV !== 'production' && { error: err.message })
+  });
 };
 
 export const notFound = (req, res, next) => {
