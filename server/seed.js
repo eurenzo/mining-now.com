@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { query } from './src/config/db.js';
+import { logger } from './src/config/logger.js';
 
 dotenv.config();
 
@@ -9,8 +10,8 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@miningnow.com';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 if (!ADMIN_PASSWORD) {
-  console.error('Error: ADMIN_PASSWORD environment variable is not set');
-  console.error('Please set ADMIN_PASSWORD before running seed');
+  logger.error('ADMIN_PASSWORD environment variable is not set');
+  logger.error('Please set ADMIN_PASSWORD before running seed');
   process.exit(1);
 }
 
@@ -60,9 +61,9 @@ const runSeed = async () => {
         'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
         ['Admin User', ADMIN_EMAIL, password_hash, 'admin']
       );
-      console.log('Admin user created:', ADMIN_EMAIL);
+      logger.info('Admin user created', { email: ADMIN_EMAIL });
     } else {
-      console.log('Admin user already exists:', ADMIN_EMAIL);
+      logger.info('Admin user already exists', { email: ADMIN_EMAIL });
     }
 
     for (const product of products) {
@@ -82,16 +83,19 @@ const runSeed = async () => {
             product.description
           ]
         );
-        console.log('Inserted product:', product.name);
+        logger.info('Product inserted', { productName: product.name });
       } else {
-        console.log('Product already exists:', product.name);
+        logger.info('Product already exists', { productName: product.name });
       }
     }
 
-    console.log('Seed complete.');
+    logger.info('Seed complete');
     process.exit(0);
   } catch (error) {
-    console.error('Seed error:', error);
+    logger.error('Seed error', { 
+      message: error.message,
+      stack: error.stack
+    });
     process.exit(1);
   }
 };
