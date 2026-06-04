@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorMiddleware.js';
 import { requestSizeLimiter } from './middleware/requestSizeMiddleware.js';
 import { sanitizeInputs } from './middleware/sanitizeMiddleware.js';
 import { loggerMiddleware } from './middleware/loggerMiddleware.js';
+import { apiLimiter } from './middleware/rateLimitMiddleware.js';
 import pool from './config/db.js';
 import { logger } from './config/logger.js';
 
@@ -96,8 +97,9 @@ app.get('/api/v1/ready', async (req, res) => {
   }
 });
 
-// Apply API routes (rate limiting is applied at router level for each endpoint group)
-app.use('/api/v1', routes);
+// CRITICAL FIX 6: Apply global rate limiting to ALL routes
+// This ensures ALL endpoints are protected by default
+app.use('/api/v1', apiLimiter, routes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
