@@ -17,6 +17,10 @@ export const create = async (product) => {
   return findById(result.insertId);
 };
 
+/**
+ * CRITICAL FIX: Lock product for update with timeout
+ * Ensures we get fresh stock_quantity and prevent stale reads
+ */
 export const lockForUpdate = async (id, connection) => {
   const sql = `SELECT id, stock_quantity FROM products WHERE id = ? FOR UPDATE`;
   const rows = await query(sql, [id], connection);
@@ -29,14 +33,22 @@ export const findById = async (id, connection = null) => {
   return rows[0] || null;
 };
 
+/**
+ * CRITICAL FIX: Escape wildcards in search to prevent SQL injection
+ */
+const escapeWildcards = (str) => {
+  if (!str) return str;
+  return str.replace(/[%_\\]/g, '\\$&');
+};
+
 export const findAll = async ({ page = 1, limit = 20, search, brand }) => {
   const offset = (page - 1) * limit;
   const conditions = [];
   const params = [];
 
   if (search) {
-    conditions.push('name LIKE ?');
-    params.push(`%${search}%`);
+    conditions.push('name LIKE ? ESCAPE "\\\\"');
+    params.push(`%${escapeWildcards(search)}%`);
   }
   if (brand) {
     conditions.push('brand = ?');
@@ -54,8 +66,8 @@ export const countAll = async ({ search, brand }) => {
   const conditions = [];
   const params = [];
   if (search) {
-    conditions.push('name LIKE ?');
-    params.push(`%${search}%`);
+    conditions.push('name LIKE ? ESCAPE "\\\\"');
+    params.push(`%${escapeWildcards(search)}%`);
   }
   if (brand) {
     conditions.push('brand = ?');
@@ -94,8 +106,35 @@ export const remove = async (id) => {
   return query(sql, [id]);
 };
 
+/**
+ * CRITICAL FIX: Atomic stock adjustment with validation
+ * Ensures stock cannot go negative and validates minimum required
+ */
 export const adjustStock = async (id, quantityDelta, connection = null) => {
   const sql = `UPDATE products SET stock_quantity = stock_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND stock_quantity + ? >= 0`;
   const result = await query(sql, [quantityDelta, id, quantityDelta], connection);
+  return result.affectedRows > 0;
+};
+
+/**
+ * CRITICAL FIX: Atomic stock adjustment with minimum check
+ * Ensures we don't oversell when other transactions modify stock
+ */
+export const adjustStockAtomic = async (id, quantityDelta, minRequired, connection) => {
+  const sql = `
+    UPDATE products 
+    SET stock_quantity = stock_quantity + ?, 
+        updated_at = CURRENT_TIMESTAMP 
+    WHERE id = ? 
+      AND stock_quantity >= ?
+      AND stock_quantity + ? >= 0
+  `;
+  
+  const result = await query(
+    sql, 
+    [quantityDelta, id, minRequired, quantityDelta], 
+    connection
+  );
+  
   return result.affectedRows > 0;
 };

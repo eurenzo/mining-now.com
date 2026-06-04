@@ -1,4 +1,5 @@
 import { query, getConnection } from '../config/db.js';
+import { logger } from '../config/logger.js';
 
 export const create = async (userId, totalAmount, status = 'pending', connection = null) => {
   const sql = `INSERT INTO orders (user_id, total_amount, status) VALUES (?, ?, ?)`;
@@ -79,14 +80,52 @@ export const rollback = async (connection) => {
   }
 };
 
-export const withTransaction = async (callback) => {
-  const connection = await transaction();
-  try {
-    const result = await callback(connection);
-    await commit(connection);
-    return result;
-  } catch (error) {
-    await rollback(connection);
-    throw error;
+/**
+ * CRITICAL FIX: Transaction with timeout and deadlock retry logic
+ * Prevents transaction hangs and handles deadlock scenarios
+ */
+export const withTransaction = async (callback, maxRetries = 3) => {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const connection = await transaction();
+    
+    try {
+      // Add timeout to transaction (30 seconds)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Transaction timeout after 30 seconds'));
+        }, 30 * 1000);
+      });
+
+      const result = await Promise.race([
+        callback(connection),
+        timeoutPromise
+      ]);
+
+      await commit(connection);
+      return result;
+    } catch (error) {
+      await rollback(connection);
+      lastError = error;
+
+      // Detect deadlock and retry
+      if (error.code === 'ER_LOCK_DEADLOCK') {
+        logger.warn(`Deadlock detected, retry ${attempt}/${maxRetries}`, { 
+          error: error.message 
+        });
+        
+        if (attempt < maxRetries) {
+          // Exponential backoff: 100ms, 200ms, 400ms
+          const delay = Math.pow(2, attempt - 1) * 100;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      throw error;
+    }
   }
+
+  throw lastError;
 };
