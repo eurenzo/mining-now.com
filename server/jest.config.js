@@ -1,6 +1,8 @@
 export default {
   testEnvironment: 'node',
-  transform: {},
+  transform: {
+    '^.+\\.js$': ['babel-jest', { rootMode: 'upward' }],
+  },
   injectGlobals: true,
   collectCoverageFrom: [
     'src/**/*.js',
@@ -16,5 +18,6 @@ export default {
     }
   },
   testPathIgnorePatterns: ['/node_modules/'],
-  transformIgnorePatterns: ['/node_modules/']
+  transformIgnorePatterns: ['/node_modules/'],
+  extensionsToTreatAsEsm: ['.js'],
 };
