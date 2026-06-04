@@ -33,9 +33,11 @@ export const authLimiter = rateLimit({
 
 /**
  * General API Limiter - Standard rate limiting for most endpoints
- * 
  * Default: 100 requests per 15 minutes per IP
  * Protects against abuse while allowing normal usage
+ * 
+ * CRITICAL FIX 6: This limiter is applied globally at app level
+ * to ensure ALL API endpoints are protected consistently
  */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -99,4 +101,3 @@ export const readLimiter = rateLimit({
     return req.ip || req.connection.remoteAddress;
   }
 });
-
